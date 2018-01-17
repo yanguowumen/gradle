@@ -50,6 +50,7 @@ class SimpleIncrementalAnnotationProcessingIntegrationTest extends AbstractInteg
                 compileJava.options.incremental = true
                 options.fork = true
                 options.annotationProcessorPath = configurations.annotationProcessor
+                options.annotationProcessorGeneratedSourcesDirectory = new File(buildDir, "generated-sources/main/java")
             }
         """
 
@@ -90,6 +91,20 @@ class SimpleIncrementalAnnotationProcessingIntegrationTest extends AbstractInteg
         outputs.recompiledClasses("A", "AHelper")
     }
 
+    def "generated classes are deleted when the source file is deleted"() {
+        def a = java "@Helper class A {}"
+        java "class B {}"
+
+        outputs.snapshot { run "compileJava" }
+
+        when:
+        a.delete()
+        run "compileJava"
+
+        then:
+        outputs.deletedClasses("A", "AHelper")
+    }
+
     def "unrelated classes are not recompiled when an annotated class changes"() {
         def a = java "@Helper class A {}"
         java "class B {}"
@@ -102,5 +117,19 @@ class SimpleIncrementalAnnotationProcessingIntegrationTest extends AbstractInteg
 
         then:
         outputs.recompiledClasses("A", "AHelper")
+    }
+
+    def "annotated classes are not recompiled when an unrelated class changes"() {
+        java "@Helper class A {}"
+        def b = java "class B {}"
+
+        outputs.snapshot { run "compileJava" }
+
+        when:
+        b.text = "class B { public void foo() {} }"
+        run "compileJava"
+
+        then:
+        outputs.recompiledClasses("B")
     }
 }

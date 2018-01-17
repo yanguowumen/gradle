@@ -32,26 +32,36 @@ class IncrementalCompilationInitializerTest extends Specification {
     def "prepares patterns"() {
         PatternSet classesToDelete = Mock(PatternSet)
         PatternSet sourceToCompile = Mock(PatternSet)
+        PatternSet sourcesToDelete = Mock(PatternSet)
 
         when:
-        initializer.preparePatterns(["com.Foo", "Bar"], classesToDelete, sourceToCompile)
+        initializer.preparePatterns(["com.Foo", "Bar"], classesToDelete, sourceToCompile, sourcesToDelete)
 
         then:
         1 * classesToDelete.include('com/Foo.class')
         1 * classesToDelete.include('com/Foo$*.class')
         1 * classesToDelete.include('Bar.class')
         1 * classesToDelete.include('Bar$*.class')
+        1 * classesToDelete.include(['com/FooHelper.class'])
+        1 * classesToDelete.include(['com/FooHelper$*.class'])
+        1 * classesToDelete.include(['BarHelper.class'])
+        1 * classesToDelete.include(['BarHelper$*.class'])
 
         1 * sourceToCompile.include('Bar.java')
         1 * sourceToCompile.include('com/Foo.java')
         1 * sourceToCompile.include('Bar$*.java')
         1 * sourceToCompile.include('com/Foo$*.java')
 
+        1 * sourcesToDelete.include(['com/FooHelper.java'])
+        1 * sourcesToDelete.include(['com/FooHelper$*.java'])
+        1 * sourcesToDelete.include(['BarHelper.java'])
+        1 * sourcesToDelete.include(['BarHelper$*.java'])
+
         0 * _
     }
 
     def "does not prepare patterns when stale classes empty"() {
-        when: initializer.preparePatterns([], Mock(PatternSet), Mock(PatternSet))
+        when: initializer.preparePatterns([], Mock(PatternSet), Mock(PatternSet), Mock(PatternSet))
         then: thrown(AssertionError)
     }
 
