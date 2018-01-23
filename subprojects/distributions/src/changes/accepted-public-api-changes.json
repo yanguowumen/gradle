@@ -1,3 +1,9 @@
 {
-    "acceptedApiChanges": []
+    "acceptedApiChanges": [
+        {
+            "type": "org.gradle.api.tasks.compile.JavaCompile",
+            "member": "Method org.gradle.api.tasks.compile.JavaCompile.getModuleRegistry()",
+            "acceptation": "Internal method for injection"
+        }
+    ]
 }

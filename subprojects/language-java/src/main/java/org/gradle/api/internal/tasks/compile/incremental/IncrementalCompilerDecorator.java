@@ -16,10 +16,12 @@
 
 package org.gradle.api.internal.tasks.compile.incremental;
 
+import com.google.common.collect.Lists;
 import org.apache.tools.zip.ZipEntry;
 import org.apache.tools.zip.ZipFile;
 import org.gradle.api.UncheckedIOException;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.classpath.ModuleRegistry;
 import org.gradle.api.internal.tasks.compile.CleaningJavaCompiler;
 import org.gradle.api.internal.tasks.compile.JavaCompileSpec;
 import org.gradle.api.internal.tasks.compile.incremental.cache.CompileCaches;
@@ -29,11 +31,13 @@ import org.gradle.api.internal.tasks.compile.incremental.jar.JarClasspathSnapsho
 import org.gradle.api.internal.tasks.compile.incremental.jar.PreviousCompilation;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.logging.Logging;
+import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.incremental.IncrementalTaskInputs;
 import org.gradle.language.base.internal.compile.Compiler;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 
 public class IncrementalCompilerDecorator {
 
@@ -46,12 +50,13 @@ public class IncrementalCompilerDecorator {
     private final ClassSetAnalysisUpdater classSetAnalysisUpdater;
     private final CompilationSourceDirs sourceDirs;
     private final FileCollection annotationProcessorPath;
+    private final ModuleRegistry moduleRegistry;
     private final IncrementalCompilationInitializer compilationInitializer;
 
     public IncrementalCompilerDecorator(JarClasspathSnapshotMaker jarClasspathSnapshotMaker, CompileCaches compileCaches,
                                         IncrementalCompilationInitializer compilationInitializer, CleaningJavaCompiler cleaningCompiler, String displayName,
                                         RecompilationSpecProvider staleClassDetecter, ClassSetAnalysisUpdater classSetAnalysisUpdater,
-                                        CompilationSourceDirs sourceDirs, FileCollection annotationProcessorPath) {
+                                        CompilationSourceDirs sourceDirs, FileCollection annotationProcessorPath, ModuleRegistry moduleRegistry) {
         this.jarClasspathSnapshotMaker = jarClasspathSnapshotMaker;
         this.compileCaches = compileCaches;
         this.compilationInitializer = compilationInitializer;
@@ -61,6 +66,7 @@ public class IncrementalCompilerDecorator {
         this.classSetAnalysisUpdater = classSetAnalysisUpdater;
         this.sourceDirs = sourceDirs;
         this.annotationProcessorPath = annotationProcessorPath;
+        this.moduleRegistry = moduleRegistry;
     }
 
     public Compiler<JavaCompileSpec> prepareCompiler(IncrementalTaskInputs inputs) {
@@ -69,6 +75,10 @@ public class IncrementalCompilerDecorator {
     }
 
     private Compiler<JavaCompileSpec> getCompiler(IncrementalTaskInputs inputs, CompilationSourceDirs sourceDirs) {
+        return new IncapCompiler(getActualCompiler(inputs, sourceDirs));
+    }
+
+    private Compiler<JavaCompileSpec> getActualCompiler(IncrementalTaskInputs inputs, CompilationSourceDirs sourceDirs) {
         if (!inputs.isIncremental()) {
             LOG.info("{} - is not incremental (e.g. outputs have changed, no previous execution, etc.).", displayName);
             return cleaningCompiler;
@@ -88,6 +98,30 @@ public class IncrementalCompilerDecorator {
         }
         PreviousCompilation previousCompilation = new PreviousCompilation(new ClassSetAnalysis(data), compileCaches.getLocalJarClasspathSnapshotStore(), compileCaches.getJarSnapshotCache());
         return new SelectiveCompiler(inputs, previousCompilation, cleaningCompiler, staleClassDetecter, compilationInitializer, jarClasspathSnapshotMaker);
+    }
+
+    private class IncapCompiler implements Compiler<JavaCompileSpec> {
+
+        private final Compiler<JavaCompileSpec> delegate;
+
+        private IncapCompiler(Compiler<JavaCompileSpec> delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public WorkResult execute(JavaCompileSpec spec) {
+            File mappingFile = new File(spec.getWorkingDir(), "build/incap/mapping.txt");
+
+            if (!spec.getAnnotationProcessorPath().isEmpty()) {
+                List<File> newProcessorPath = Lists.newArrayList(spec.getAnnotationProcessorPath());
+                newProcessorPath.addAll(moduleRegistry.getModule("gradle-incap").getClasspath().getAsFiles());
+                spec.setAnnotationProcessorPath(newProcessorPath);
+                spec.getCompileOptions().getCompilerArgs().add("-processor");
+                spec.getCompileOptions().getCompilerArgs().add("org.gradle.incap.HelloProcessor");
+                spec.getCompileOptions().getCompilerArgs().add("-Aorg.gradle.incap.mappingFile=" + mappingFile.getAbsolutePath());
+            }
+            return delegate.execute(spec);
+        }
     }
 
     private boolean hasNonIncrementalProcessors() {

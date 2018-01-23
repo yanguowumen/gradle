@@ -95,6 +95,7 @@ include("persistentCache")
 include("buildCache")
 include("coreApi")
 include("versionControl")
+include("incap")
 
 val upperCaseLetters = "\\p{Upper}".toRegex()
 

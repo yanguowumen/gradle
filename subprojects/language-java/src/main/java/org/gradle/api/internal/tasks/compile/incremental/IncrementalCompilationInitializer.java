@@ -16,7 +16,15 @@
 
 package org.gradle.api.internal.tasks.compile.incremental;
 
+import com.google.common.base.Charsets;
+import com.google.common.base.Splitter;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Multimap;
+import com.google.common.io.Files;
+import com.google.common.io.LineProcessor;
+import org.gradle.api.UncheckedIOException;
 import org.gradle.api.internal.file.FileOperations;
 import org.gradle.api.internal.file.collections.SimpleFileCollection;
 import org.gradle.api.internal.tasks.compile.JavaCompileSpec;
@@ -24,6 +32,7 @@ import org.gradle.api.tasks.util.PatternSet;
 import org.gradle.internal.Factory;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
@@ -40,12 +49,19 @@ class IncrementalCompilationInitializer {
             return; //do nothing. No classes need recompilation.
         }
 
+        Multimap<String, String> previousGeneratedFiles = null;
+        try {
+            previousGeneratedFiles = configureIncap(spec);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+
         Factory<PatternSet> patternSetFactory = fileOperations.getFileResolver().getPatternSetFactory();
         PatternSet classesToDelete = patternSetFactory.create();
         PatternSet sourceToCompile = patternSetFactory.create();
         PatternSet sourceToDelete = patternSetFactory.create();
 
-        preparePatterns(staleClasses, classesToDelete, sourceToCompile, sourceToDelete);
+        preparePatterns(staleClasses, previousGeneratedFiles, classesToDelete, sourceToCompile, sourceToDelete);
 
         //selectively configure the source
         spec.setSource(spec.getSource().getAsFileTree().matching(sourceToCompile));
@@ -62,17 +78,44 @@ class IncrementalCompilationInitializer {
         fileOperations.delete(fileOperations.fileTree(generatedSourcesDirectory).matching(sourceToDelete));
     }
 
-    void preparePatterns(Collection<String> staleClasses, PatternSet classesToDelete, PatternSet sourceToCompile, PatternSet sourceToDelete) {
+    private Multimap<String, String> configureIncap(JavaCompileSpec spec) throws IOException {
+        File mappingFile = new File(spec.getWorkingDir(), "build/incap/mapping.txt");
+        if (!mappingFile.exists()) {
+            return ImmutableMultimap.of();
+        }
+        final Multimap<String, String> previousMappings = HashMultimap.create();
+        Files.readLines(mappingFile, Charsets.UTF_8, new LineProcessor<Void>() {
+            @Override
+            public boolean processLine(String line) throws IOException {
+                List<String> split = Splitter.on(';').splitToList(line);
+                previousMappings.put(split.get(0), split.get(1));
+                return true;
+            }
+
+            @Override
+            public Void getResult() {
+                return null;
+            }
+        });
+        mappingFile.delete();
+        return previousMappings;
+    }
+
+    void preparePatterns(Collection<String> staleClasses, Multimap<String, String> previousGeneratedFiles, PatternSet classesToDelete, PatternSet sourceToCompile, PatternSet sourceToDelete) {
         assert !staleClasses.isEmpty(); //if stale classes are empty (e.g. nothing to recompile), the patterns will not have any includes and will match all (e.g. recompile everything).
         for (String staleClass : staleClasses) {
             String path = staleClass.replaceAll("\\.", "/");
             classesToDelete.include(path.concat(".class"));
             classesToDelete.include(path.concat("$*.class"));
-            classesToDelete.include(path.concat("Helper.class"));
-            classesToDelete.include(path.concat("Helper$*.class"));
 
-            sourceToDelete.include(path.concat("Helper.java"));
-            sourceToDelete.include(path.concat("Helper$*.java"));
+            for (String generatedClass : previousGeneratedFiles.get(staleClass)) {
+                String generatedPath = generatedClass.replaceAll("\\.", "/");
+                classesToDelete.include(generatedPath.concat(".class"));
+                classesToDelete.include(generatedPath.concat("$*.class"));
+
+                sourceToDelete.include(generatedPath.concat(".java"));
+                sourceToDelete.include(generatedPath.concat("$*.java"));
+            }
 
             //the stale class might be a source class that was deleted
             //it's no harm to include it in sourceToCompile anyway

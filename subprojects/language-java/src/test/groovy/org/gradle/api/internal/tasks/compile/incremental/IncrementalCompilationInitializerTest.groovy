@@ -18,6 +18,7 @@
 
 package org.gradle.api.internal.tasks.compile.incremental
 
+import com.google.common.collect.ImmutableMultimap
 import org.gradle.api.internal.file.FileOperations
 import org.gradle.api.internal.tasks.compile.JavaCompileSpec
 import org.gradle.api.tasks.util.PatternSet
@@ -35,33 +36,24 @@ class IncrementalCompilationInitializerTest extends Specification {
         PatternSet sourcesToDelete = Mock(PatternSet)
 
         when:
-        initializer.preparePatterns(["com.Foo", "Bar"], classesToDelete, sourceToCompile, sourcesToDelete)
+        initializer.preparePatterns(["com.Foo", "Bar"], ImmutableMultimap.of(), classesToDelete, sourceToCompile, sourcesToDelete)
 
         then:
         1 * classesToDelete.include('com/Foo.class')
         1 * classesToDelete.include('com/Foo$*.class')
         1 * classesToDelete.include('Bar.class')
         1 * classesToDelete.include('Bar$*.class')
-        1 * classesToDelete.include(['com/FooHelper.class'])
-        1 * classesToDelete.include(['com/FooHelper$*.class'])
-        1 * classesToDelete.include(['BarHelper.class'])
-        1 * classesToDelete.include(['BarHelper$*.class'])
 
         1 * sourceToCompile.include('Bar.java')
         1 * sourceToCompile.include('com/Foo.java')
         1 * sourceToCompile.include('Bar$*.java')
         1 * sourceToCompile.include('com/Foo$*.java')
 
-        1 * sourcesToDelete.include(['com/FooHelper.java'])
-        1 * sourcesToDelete.include(['com/FooHelper$*.java'])
-        1 * sourcesToDelete.include(['BarHelper.java'])
-        1 * sourcesToDelete.include(['BarHelper$*.java'])
-
         0 * _
     }
 
     def "does not prepare patterns when stale classes empty"() {
-        when: initializer.preparePatterns([], Mock(PatternSet), Mock(PatternSet), Mock(PatternSet))
+        when: initializer.preparePatterns([], ImmutableMultimap.of(), Mock(PatternSet), Mock(PatternSet), Mock(PatternSet))
         then: thrown(AssertionError)
     }
 
