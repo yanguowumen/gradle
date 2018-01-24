@@ -9,7 +9,7 @@ dependencies {
     implementation project(':resourcesHttp')
     implementation libraries.slf4j_api
     implementation libraries.guava
-    implementation libraries.awsS3
+    implementation libraries.awsS3, libraries.jackson, libraries.commons_httpclient, libraries.joda
     implementation libraries.commons_lang
 }
 

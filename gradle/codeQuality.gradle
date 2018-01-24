@@ -29,7 +29,7 @@ tasks.withType(CodeNarc) {
     reports.xml.enabled = true
 }
 
-configurations.codenarc.resolutionStrategy.force(libraries.groovy)
+configurations.codenarc.resolutionStrategy.force(libraries.groovy + ":2.4.12") //TODO replace with constraint
 
 plugins.withType(GroovyBasePlugin) {
     sourceSets.all { sourceSet ->
