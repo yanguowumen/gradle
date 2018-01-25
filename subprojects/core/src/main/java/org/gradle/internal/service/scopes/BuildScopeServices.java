@@ -77,6 +77,7 @@ import org.gradle.api.internal.tasks.userinput.UserInputHandler;
 import org.gradle.api.provider.ProviderFactory;
 import org.gradle.cache.CacheRepository;
 import org.gradle.cache.CacheValidator;
+import org.gradle.cache.internal.CacheKeyBuilder;
 import org.gradle.caching.internal.BuildCacheServices;
 import org.gradle.composite.internal.IncludedBuildRegistry;
 import org.gradle.configuration.BuildConfigurer;
@@ -259,10 +260,11 @@ public class BuildScopeServices extends DefaultServiceRegistry {
 
     protected ScriptCompilerFactory createScriptCompileFactory(ListenerManager listenerManager,
                                                                FileCacheBackedScriptClassCompiler scriptCompiler,
+                                                               CacheKeyBuilder cacheKeyBuilder,
                                                                CrossBuildInMemoryCachingScriptClassCache cache) {
         ScriptExecutionListener scriptExecutionListener = listenerManager.getBroadcaster(ScriptExecutionListener.class);
         return new DefaultScriptCompilerFactory(
-            new BuildScopeInMemoryCachingScriptClassCompiler(cache, scriptCompiler),
+            new BuildScopeInMemoryCachingScriptClassCompiler(cache, cacheKeyBuilder, scriptCompiler),
             new DefaultScriptRunnerFactory(
                 scriptExecutionListener,
                 DirectInstantiator.INSTANCE

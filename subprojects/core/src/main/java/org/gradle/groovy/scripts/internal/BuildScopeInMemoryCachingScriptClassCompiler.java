@@ -20,6 +20,7 @@ import groovy.lang.Script;
 import org.codehaus.groovy.ast.ClassNode;
 import org.gradle.api.Action;
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderId;
+import org.gradle.cache.internal.CacheKeyBuilder;
 import org.gradle.groovy.scripts.ScriptSource;
 import org.gradle.internal.Cast;
 
@@ -33,20 +34,27 @@ import java.util.Map;
 public class BuildScopeInMemoryCachingScriptClassCompiler implements ScriptClassCompiler {
     private final CrossBuildInMemoryCachingScriptClassCache cache;
     private final ScriptClassCompiler scriptClassCompiler;
-    private final Map<ScriptCacheKey, CompiledScript<?, ?>> cachedCompiledScripts = Maps.newHashMap();
+    private final CacheKeyBuilder cacheKeyBuilder;
+    private final Map<String, CompiledScript<?, ?>> cachedCompiledScripts = Maps.newHashMap();
 
-    public BuildScopeInMemoryCachingScriptClassCompiler(CrossBuildInMemoryCachingScriptClassCache cache, ScriptClassCompiler scriptClassCompiler) {
+    public BuildScopeInMemoryCachingScriptClassCompiler(CrossBuildInMemoryCachingScriptClassCache cache, CacheKeyBuilder cacheKeyBuilder, ScriptClassCompiler scriptClassCompiler) {
         this.cache = cache;
+        this.cacheKeyBuilder = cacheKeyBuilder;
         this.scriptClassCompiler = scriptClassCompiler;
     }
 
     @Override
     public <T extends Script, M> CompiledScript<T, M> compile(ScriptSource source, ClassLoader classLoader, ClassLoaderId classLoaderId, CompileOperation<M> operation, Class<T> scriptBaseClass, Action<? super ClassNode> verifier) {
-        ScriptCacheKey key = new ScriptCacheKey(source.getClassName(), classLoader, operation.getId());
-        CompiledScript<T, M> compiledScript = Cast.uncheckedCast(cachedCompiledScripts.get(key));
+        CacheKeyBuilder.CacheKeySpec cacheKeySpec = CacheKeyBuilder.CacheKeySpec
+            .withPrefix("build-scope-in-memory-script-classes")
+            .plus(source.getClassName())
+            .plus(classLoader)
+            .plus(operation.getId());
+        String cacheKey = cacheKeyBuilder.build(cacheKeySpec);
+        CompiledScript<T, M> compiledScript = Cast.uncheckedCast(cachedCompiledScripts.get(cacheKey));
         if (compiledScript == null) {
             compiledScript = cache.getOrCompile(source, classLoader, classLoaderId, operation, scriptBaseClass, verifier, scriptClassCompiler);
-            cachedCompiledScripts.put(key, compiledScript);
+            cachedCompiledScripts.put(cacheKey, compiledScript);
         }
         return compiledScript;
     }

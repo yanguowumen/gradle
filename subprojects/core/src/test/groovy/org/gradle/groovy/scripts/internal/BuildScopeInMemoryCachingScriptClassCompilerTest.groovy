@@ -17,10 +17,15 @@ package org.gradle.groovy.scripts.internal
 
 import org.gradle.api.Action
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderId
+import org.gradle.cache.internal.CacheKeyBuilder
+import org.gradle.cache.internal.DefaultCacheKeyBuilder
 import org.gradle.groovy.scripts.Script
 import org.gradle.groovy.scripts.ScriptSource
 import org.gradle.groovy.scripts.TestScript
 import org.gradle.groovy.scripts.Transformer
+import org.gradle.internal.classloader.ClassLoaderHierarchyHasher
+import org.gradle.internal.hash.HashCode
+import org.gradle.internal.hash.Hashing
 import spock.lang.Specification
 
 class BuildScopeInMemoryCachingScriptClassCompilerTest extends Specification {
@@ -31,7 +36,9 @@ class BuildScopeInMemoryCachingScriptClassCompilerTest extends Specification {
             d.compile(source, classLoader, classLoaderId, operation, scriptBaseClass, verifier)
         }
     }
-    private final BuildScopeInMemoryCachingScriptClassCompiler compiler = new BuildScopeInMemoryCachingScriptClassCompiler(cache, target)
+    private final ClassLoaderHierarchyHasher classLoaderHierarchyHasher = Mock(ClassLoaderHierarchyHasher)
+    private final CacheKeyBuilder cacheKeyBuilder = new DefaultCacheKeyBuilder(Hashing.md5(), null, null, classLoaderHierarchyHasher)
+    private final BuildScopeInMemoryCachingScriptClassCompiler compiler = new BuildScopeInMemoryCachingScriptClassCompiler(cache, cacheKeyBuilder, target)
     private final CompiledScript<?, ?> compiledScript = Mock(CompiledScript)
     private final String classpathClosureName = "buildscript"
     final verifier = Mock(Action)
@@ -49,6 +56,7 @@ class BuildScopeInMemoryCachingScriptClassCompilerTest extends Specification {
 
         then:
         c1 == c2
+        2 * classLoaderHierarchyHasher.getClassLoaderHash(parentClassLoader) >> HashCode.fromInt(42)
         1 * target.compile(script1, parentClassLoader, classLoaderId, transformer, Script.class, verifier) >> compiledScript
         0 * target._
     }
@@ -64,6 +72,7 @@ class BuildScopeInMemoryCachingScriptClassCompilerTest extends Specification {
         compiler.compile(script2, parentClassLoader, classLoaderId, transformer, Script.class, verifier)
 
         then:
+        2 * classLoaderHierarchyHasher.getClassLoaderHash(parentClassLoader) >> HashCode.fromInt(42)
         1 * target.compile(script1, parentClassLoader, classLoaderId, transformer, Script.class, verifier)
         1 * target.compile(script2, parentClassLoader, classLoaderId, transformer, Script.class, verifier)
     }
@@ -80,6 +89,7 @@ class BuildScopeInMemoryCachingScriptClassCompilerTest extends Specification {
         compiler.compile(script2, parentClassLoader, classLoaderId, transformer2, Script.class, verifier)
 
         then:
+        2 * classLoaderHierarchyHasher.getClassLoaderHash(parentClassLoader) >> HashCode.fromInt(42)
         1 * target.compile(script1, parentClassLoader, classLoaderId, transformer1, Script.class, verifier)
         1 * target.compile(script2, parentClassLoader, classLoaderId, transformer2, Script.class, verifier)
     }
@@ -96,7 +106,9 @@ class BuildScopeInMemoryCachingScriptClassCompilerTest extends Specification {
         compiler.compile(script2, parentClassLoader2, classLoaderId, transformer, Script.class, verifier)
 
         then:
+        1 * classLoaderHierarchyHasher.getClassLoaderHash(parentClassLoader1) >> HashCode.fromInt(42)
         1 * target.compile(script1, parentClassLoader1, classLoaderId, transformer, Script.class, verifier)
+        1 * classLoaderHierarchyHasher.getClassLoaderHash(parentClassLoader2) >> HashCode.fromInt(23)
         1 * target.compile(script2, parentClassLoader2, classLoaderId, transformer, Script.class, verifier)
     }
 
@@ -111,6 +123,7 @@ class BuildScopeInMemoryCachingScriptClassCompilerTest extends Specification {
         compiler.compile(script2, parentClassLoader, classLoaderId, transformer, TestScript.class, verifier)
 
         then:
+        2 * classLoaderHierarchyHasher.getClassLoaderHash(parentClassLoader) >> HashCode.fromInt(42)
         1 * target.compile(script1, parentClassLoader, classLoaderId, transformer, Script.class, verifier)
         1 * target.compile(script2, parentClassLoader, classLoaderId, transformer, TestScript.class, verifier)
     }

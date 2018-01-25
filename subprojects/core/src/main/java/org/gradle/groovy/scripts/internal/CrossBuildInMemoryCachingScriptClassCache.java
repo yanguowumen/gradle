@@ -19,6 +19,7 @@ import groovy.lang.Script;
 import org.codehaus.groovy.ast.ClassNode;
 import org.gradle.api.Action;
 import org.gradle.api.internal.initialization.loadercache.ClassLoaderId;
+import org.gradle.cache.internal.CacheKeyBuilder;
 import org.gradle.cache.internal.CrossBuildInMemoryCache;
 import org.gradle.cache.internal.CrossBuildInMemoryCacheFactory;
 import org.gradle.groovy.scripts.ScriptSource;
@@ -26,11 +27,13 @@ import org.gradle.internal.Cast;
 import org.gradle.internal.hash.HashCode;
 
 public class CrossBuildInMemoryCachingScriptClassCache {
-    private final CrossBuildInMemoryCache<ScriptCacheKey, CachedCompiledScript> cachedCompiledScripts;
-    private final ScriptSourceHasher hasher;
+    private final CrossBuildInMemoryCache<String, CachedCompiledScript> cachedCompiledScripts;
+    private final ScriptSourceHasher scriptSourceHasher;
+    private final CacheKeyBuilder cacheKeyBuilder;
 
-    public CrossBuildInMemoryCachingScriptClassCache(ScriptSourceHasher hasher, CrossBuildInMemoryCacheFactory cacheFactory) {
-        this.hasher = hasher;
+    public CrossBuildInMemoryCachingScriptClassCache(ScriptSourceHasher scriptSourceHasher, CacheKeyBuilder cacheKeyBuilder, CrossBuildInMemoryCacheFactory cacheFactory) {
+        this.scriptSourceHasher = scriptSourceHasher;
+        this.cacheKeyBuilder = cacheKeyBuilder;
         cachedCompiledScripts = cacheFactory.newCache();
     }
 
@@ -40,16 +43,21 @@ public class CrossBuildInMemoryCachingScriptClassCache {
                                                                    Class<T> scriptBaseClass,
                                                                    Action<? super ClassNode> verifier,
                                                                    ScriptClassCompiler delegate) {
-        ScriptCacheKey key = new ScriptCacheKey(source.getClassName(), classLoader, operation.getId());
-        CachedCompiledScript cached = cachedCompiledScripts.get(key);
-        HashCode hash = hasher.hash(source);
+        CacheKeyBuilder.CacheKeySpec cacheKeySpec = CacheKeyBuilder.CacheKeySpec
+            .withPrefix("cross-build-in-memory-script-classes")
+            .plus(source.getClassName())
+            .plus(classLoader)
+            .plus(operation.getId());
+        String cacheKey = cacheKeyBuilder.build(cacheKeySpec);
+        CachedCompiledScript cached = cachedCompiledScripts.get(cacheKey);
+        HashCode hash = scriptSourceHasher.hash(source);
         if (cached != null) {
             if (hash.equals(cached.hash)) {
                 return Cast.uncheckedCast(cached.compiledScript);
             }
         }
         CompiledScript<T, M> compiledScript = delegate.compile(source, classLoader, classLoaderId, operation, scriptBaseClass, verifier);
-        cachedCompiledScripts.put(key, new CachedCompiledScript(hash, compiledScript));
+        cachedCompiledScripts.put(cacheKey, new CachedCompiledScript(hash, compiledScript));
         return compiledScript;
     }
 

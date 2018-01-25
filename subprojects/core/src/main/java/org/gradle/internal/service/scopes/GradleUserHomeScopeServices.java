@@ -44,6 +44,7 @@ import org.gradle.api.internal.initialization.loadercache.DefaultClasspathHasher
 import org.gradle.api.internal.model.NamedObjectInstantiator;
 import org.gradle.cache.CacheRepository;
 import org.gradle.cache.PersistentIndexedCache;
+import org.gradle.cache.internal.CacheKeyBuilder;
 import org.gradle.cache.internal.CacheRepositoryServices;
 import org.gradle.cache.internal.CacheScopeMapping;
 import org.gradle.cache.internal.CrossBuildInMemoryCacheFactory;
@@ -126,8 +127,8 @@ public class GradleUserHomeScopeServices {
         return new DefaultScriptSourceHasher(fileHasher, contentHasherFactory);
     }
 
-    CrossBuildInMemoryCachingScriptClassCache createCachingScriptCompiler(ScriptSourceHasher hasher, CrossBuildInMemoryCacheFactory cacheFactory) {
-        return new CrossBuildInMemoryCachingScriptClassCache(hasher, cacheFactory);
+    CrossBuildInMemoryCachingScriptClassCache createCachingScriptCompiler(ScriptSourceHasher scriptSourceHasher, CacheKeyBuilder cacheKeyBuilder, CrossBuildInMemoryCacheFactory cacheFactory) {
+        return new CrossBuildInMemoryCachingScriptClassCache(scriptSourceHasher, cacheKeyBuilder, cacheFactory);
     }
 
     ValueSnapshotter createValueSnapshotter(ClassLoaderHierarchyHasher classLoaderHierarchyHasher) {
